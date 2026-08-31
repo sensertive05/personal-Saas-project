@@ -76,6 +76,6 @@ export const useCartStore = create<CartState>()(
         })),
       clear: () => set({ items: [] }),
     }),
-    { name: "cart-storage" }
+    { name: "cart-storage", skipHydration: true }
   )
 );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 
@@ -7,9 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { useCartStore } from "@/stores/cart-store";
 
 export function SiteHeader() {
+  const [hasHydrated, setHasHydrated] = useState(false);
   const itemCount = useCartStore((state) =>
     state.items.reduce((total, item) => total + item.quantity, 0)
   );
+
+  useEffect(() => {
+    void useCartStore.persist.rehydrate()?.then(() => setHasHydrated(true));
+  }, []);
 
   return (
     <header className="border-b">
@@ -26,7 +32,7 @@ export function SiteHeader() {
           </Link>
           <Link href="/cart" className="relative flex items-center gap-1.5">
             <ShoppingCart className="size-5" />
-            {itemCount > 0 && (
+            {hasHydrated && itemCount > 0 && (
               <Badge
                 variant="destructive"
                 className="absolute -right-2 -top-2 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]"
