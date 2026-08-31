@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { createOrder } from "@/lib/queries/orders";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useCartStore } from "@/stores/cart-store";
 
 const currencyFormatter = new Intl.NumberFormat("ko-KR", {
@@ -27,15 +31,25 @@ const currencyFormatter = new Intl.NumberFormat("ko-KR", {
 });
 
 export default function CartPage() {
+  const router = useRouter();
   const items = useCartStore((state) => state.items);
   const setQuantity = useCartStore((state) => state.setQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
+  const clearCart = useCartStore((state) => state.clear);
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
+
+  const placeOrder = useMutation({
+    mutationFn: () => createOrder(items),
+    onSuccess: (orderId) => {
+      clearCart();
+      router.push(`/orders/${orderId}`);
+    },
+  });
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-8">
@@ -129,13 +143,37 @@ export default function CartPage() {
           </Card>
 
           <Card>
-            <CardContent className="flex items-center justify-between">
-              <div className="text-muted-foreground text-sm">
-                총 {totalQuantity}개
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="text-muted-foreground text-sm">
+                  총 {totalQuantity}개
+                </div>
+                <div className="text-lg font-semibold">
+                  {currencyFormatter.format(totalPrice)}
+                </div>
               </div>
-              <div className="text-lg font-semibold">
-                {currencyFormatter.format(totalPrice)}
-              </div>
+
+              {!isSupabaseConfigured && (
+                <p className="text-muted-foreground text-sm">
+                  Supabase 연결이 필요합니다. 연결 후 주문할 수 있습니다.
+                </p>
+              )}
+
+              {placeOrder.isError && (
+                <p className="text-destructive text-sm">
+                  {placeOrder.error instanceof Error
+                    ? placeOrder.error.message
+                    : "주문에 실패했습니다."}
+                </p>
+              )}
+
+              <Button
+                className="self-end"
+                disabled={!isSupabaseConfigured || placeOrder.isPending}
+                onClick={() => placeOrder.mutate()}
+              >
+                {placeOrder.isPending ? "주문 처리 중..." : "주문하기"}
+              </Button>
             </CardContent>
           </Card>
         </>

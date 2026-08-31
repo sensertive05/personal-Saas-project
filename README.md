@@ -9,8 +9,8 @@
 ### 사용자 영역
 - 상품 조회 ✅ (구현됨)
 - 장바구니 ✅ (구현됨)
-- 주문
-- 주문 상태 확인
+- 주문 ✅ (구현됨)
+- 주문 상태 확인 ✅ (구현됨)
 
 ### 관리자 영역
 - 상품 등록
@@ -46,7 +46,7 @@ Supabase 프로젝트가 아직 없다면 [supabase.com](https://supabase.com)�
 
 ### 3. 데이터베이스 스키마 적용
 
-Supabase SQL Editor에서 `supabase/schema.sql`을 실행해 `products` 테이블(및 샘플 데이터)을 생성합니다.
+Supabase SQL Editor에서 `supabase/schema.sql`을 실행해 `products`, `orders`, `order_items` 테이블(및 샘플 데이터, 주문 생성용 `create_order` 함수)을 생성합니다.
 
 ### 4. 개발 서버 실행
 
@@ -60,6 +60,10 @@ npm run dev
 상품 목록에서 "담기" 버튼을 누르면 장바구니(`/cart`)에 담기며, 장바구니 내용은
 로그인 없이 브라우저의 `localStorage`에 저장됩니다.
 
+장바구니에서 "주문하기"를 누르면 주문이 생성되고 재고가 차감되며, `/orders`에서
+이 브라우저로 진행한 주문 내역과 상태를 확인할 수 있습니다. 로그인 기능이 없으므로
+브라우저별 `guest_id`(localStorage)로 주문을 구분합니다.
+
 ## 문서
 
 - [아키텍처 개요](docs/architecture.md)
@@ -68,5 +72,5 @@ npm run dev
 
 ## 다음 단계
 
-주문 → 관리자(상품 등록/재고/주문/대시보드) → Supabase Auth 기반 인증 →
+관리자(상품 등록/재고/주문/대시보드) → Supabase Auth 기반 인증 →
 GA4 이벤트 계측 및 전환 퍼널 분석 순으로 확장할 예정입니다.
