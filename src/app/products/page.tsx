@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -21,6 +23,8 @@ import {
 } from "@/components/ui/table";
 import { getProducts } from "@/lib/queries/products";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { useCartStore } from "@/stores/cart-store";
+import type { Product } from "@/types/product";
 
 const currencyFormatter = new Intl.NumberFormat("ko-KR", {
   style: "currency",
@@ -84,6 +88,7 @@ export default function ProductsPage() {
                   <TableHead>카테고리</TableHead>
                   <TableHead className="text-right">가격</TableHead>
                   <TableHead className="text-right">재고</TableHead>
+                  <TableHead className="text-right">담기</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -107,6 +112,9 @@ export default function ProductsPage() {
                         product.stock_quantity
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <AddToCartButton product={product} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -115,6 +123,27 @@ export default function ProductsPage() {
         </Card>
       )}
     </main>
+  );
+}
+
+function AddToCartButton({ product }: { product: Product }) {
+  const addItem = useCartStore((state) => state.addItem);
+  const [justAdded, setJustAdded] = useState(false);
+  const outOfStock = product.stock_quantity <= 0;
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={outOfStock}
+      onClick={() => {
+        addItem(product);
+        setJustAdded(true);
+        window.setTimeout(() => setJustAdded(false), 1000);
+      }}
+    >
+      {outOfStock ? "품절" : justAdded ? "담았습니다" : "담기"}
+    </Button>
   );
 }
 
