@@ -101,6 +101,7 @@ export default function CartPage() {
                             size="icon"
                             variant="outline"
                             className="size-7"
+                            aria-label={`${item.name} 수량 감소`}
                             disabled={item.quantity <= 1}
                             onClick={() =>
                               setQuantity(item.productId, item.quantity - 1)
@@ -113,6 +114,7 @@ export default function CartPage() {
                             size="icon"
                             variant="outline"
                             className="size-7"
+                            aria-label={`${item.name} 수량 증가`}
                             disabled={item.quantity >= item.stockQuantity}
                             onClick={() =>
                               setQuantity(item.productId, item.quantity + 1)
