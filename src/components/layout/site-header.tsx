@@ -24,6 +24,9 @@ export function SiteHeader() {
           <Link href="/orders" className="text-muted-foreground hover:text-foreground">
             주문내역
           </Link>
+          <Link href="/admin/products" className="text-muted-foreground hover:text-foreground">
+            관리자
+          </Link>
           <Link href="/cart" className="relative flex items-center gap-1.5">
             <ShoppingCart className="size-5" />
             {itemCount > 0 && (

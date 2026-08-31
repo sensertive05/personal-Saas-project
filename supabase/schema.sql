@@ -16,13 +16,19 @@ create table if not exists products (
 
 create index if not exists products_created_at_idx on products (created_at desc);
 
--- 개발 단계: 조회는 누구나 가능하도록 허용 (인증 도입 시 정책 재정의 필요)
+-- 개발 단계: 관리자 인증이 아직 없어 조회/등록 모두 누구나 가능하도록 허용
+-- (Supabase Auth 도입 시 등록/수정/삭제는 관리자 역할로 제한해야 함)
 alter table products enable row level security;
 
 drop policy if exists "Public read access" on products;
 create policy "Public read access"
   on products for select
   using (true);
+
+drop policy if exists "Public insert access" on products;
+create policy "Public insert access"
+  on products for insert
+  with check (true);
 
 -- 샘플 데이터 (선택)
 insert into products (name, description, price, stock_quantity, category)
