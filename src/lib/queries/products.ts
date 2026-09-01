@@ -17,3 +17,30 @@ export async function getProducts(): Promise<Product[]> {
 
   return data ?? [];
 }
+
+export interface NewProduct {
+  name: string;
+  description: string | null;
+  price: number;
+  stock_quantity: number;
+  category: string | null;
+  image_url: string | null;
+}
+
+export async function createProduct(product: NewProduct): Promise<Product> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .insert(product)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
