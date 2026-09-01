@@ -1,0 +1,54 @@
+# 아키텍처 개요
+
+## 기술 스택
+
+| 영역 | 기술 |
+| --- | --- |
+| Frontend | Next.js (App Router), TypeScript |
+| 서버 상태 | TanStack Query |
+| 클라이언트 상태 | Zustand |
+| 스타일 | Tailwind CSS, shadcn/ui |
+| 백엔드 / DB | Supabase (PostgreSQL) |
+| 분석 | GA4, Microsoft Clarity |
+| 배포 | Vercel (Frontend), Supabase (DB) |
+
+## 폴더 구조
+
+```
+src/
+├── app/                  # Next.js App Router 라우트
+│   ├── layout.tsx        # 루트 레이아웃, QueryProvider + SiteHeader 마운트
+│   ├── page.tsx          # 랜딩 페이지
+│   ├── products/         # 상품 조회 페이지
+│   ├── cart/             # 장바구니 페이지
+│   └── orders/           # 주문 내역(목록) / 주문 상세([id]) 페이지
+├── components/
+│   ├── ui/                # shadcn/ui 기반 프리미티브 컴포넌트
+│   └── layout/site-header.tsx  # 공통 헤더 (네비게이션 + 장바구니 배지)
+├── lib/
+│   ├── supabase/client.ts  # Supabase 클라이언트 (환경변수 없으면 null)
+│   ├── queries/           # TanStack Query에서 사용하는 데이터 fetch 함수
+│   ├── guest-id.ts        # 비로그인 주문 식별용 guest_id(localStorage) 유틸
+│   └── order-status.ts    # 주문 상태 코드 → 한글 라벨 매핑
+├── providers/             # 전역 Provider (QueryClientProvider 등)
+├── stores/                # Zustand 스토어 (product-filter-store, cart-store 등)
+└── types/                 # 도메인 타입 정의
+supabase/
+└── schema.sql             # DB 스키마, RLS 정책, create_order 함수, 샘플 데이터
+```
+
+## 데이터 흐름
+
+1. UI 컴포넌트가 TanStack Query의 `useQuery`로 `src/lib/queries/*`의 함수를 호출한다.
+2. 쿼리 함수는 `src/lib/supabase/client.ts`의 Supabase 클라이언트로 PostgreSQL에 접근한다.
+3. Supabase 환경변수가 설정되지 않은 경우 클라이언트는 `null`이 되며, 화면은 "Supabase 연결 필요" 안내를 표시한다 (더미 데이터로 감추지 않는다).
+4. 여러 화면에서 공유해야 하는 클라이언트 상태(검색어, 필터, 장바구니 등)는 Zustand 스토어(`src/stores/*`)로 관리한다.
+5. 장바구니(`src/stores/cart-store.ts`)는 로그인 기능이 없는 현재 단계에서 `persist` 미들웨어로 브라우저 `localStorage`에 저장된다.
+6. 주문 생성은 클라이언트에서 여러 쿼리를 순차 실행하지 않고, Supabase Postgres 함수 `create_order(guest_id, items)`를 RPC로 한 번에 호출한다. 이 함수가 재고 확인·차감, `orders`/`order_items` insert를 하나의 트랜잭션으로 원자적으로 처리한다 (`supabase/schema.sql` 참고).
+7. 로그인이 없으므로 주문은 브라우저별 `guest_id`(`src/lib/guest-id.ts`, localStorage에 저장된 UUID)로 식별하고, 주문 내역 조회도 이 값으로 필터링한다.
+
+## 다음 단계 (MVP 로드맵)
+
+- 관리자: 상품 등록/수정, 재고 관리, 주문 관리, 매출 대시보드
+- Supabase Auth 기반 관리자 인증
+- GA4 이벤트(`view_item`, `add_to_cart`, `begin_checkout`, `purchase`) 계측 및 퍼널 분석
