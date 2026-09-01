@@ -30,6 +30,12 @@ create policy "Public insert access"
   on products for insert
   with check (true);
 
+drop policy if exists "Public update access" on products;
+create policy "Public update access"
+  on products for update
+  using (true)
+  with check (true);
+
 -- 샘플 데이터 (선택)
 insert into products (name, description, price, stock_quantity, category)
 values
