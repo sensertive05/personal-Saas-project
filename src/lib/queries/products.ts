@@ -53,12 +53,10 @@ export async function updateProductStock(
     throw new Error("SUPABASE_NOT_CONFIGURED");
   }
 
-  const { data, error } = await supabase
-    .from("products")
-    .update({ stock_quantity })
-    .eq("id", id)
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("update_product_stock", {
+    product_id: id,
+    stock_quantity,
+  });
 
   if (error) {
     throw error;

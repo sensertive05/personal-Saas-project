@@ -133,11 +133,15 @@ function InventoryRow({ product }: { product: Product }) {
   });
 
   const draftValue = Number(draft);
-  const isDraftValid = draft.trim().length > 0 && !Number.isNaN(draftValue) && draftValue >= 0;
+  const isDraftValid =
+    draft.trim().length > 0 &&
+    Number.isInteger(draftValue) &&
+    draftValue >= 0;
   const isDirty = isDraftValid && draftValue !== product.stock_quantity;
 
   const adjust = (delta: number) => {
-    const next = Math.max(product.stock_quantity + delta, 0);
+    const base = isDraftValid ? draftValue : product.stock_quantity;
+    const next = Math.max(base + delta, 0);
     setDraft(String(next));
     updateStockMutation.mutate(next);
   };
@@ -157,7 +161,10 @@ function InventoryRow({ product }: { product: Product }) {
       </TableCell>
       <TableCell>
         <div className="flex items-center justify-end gap-2">
-          {updateStockMutation.isError && (
+          {!isDraftValid && (
+            <span className="text-destructive text-xs">0 이상 정수만 가능</span>
+          )}
+          {isDraftValid && updateStockMutation.isError && (
             <span className="text-destructive text-xs">저장 실패</span>
           )}
           <Button
@@ -165,7 +172,10 @@ function InventoryRow({ product }: { product: Product }) {
             variant="outline"
             className="size-7"
             aria-label={`${product.name} 재고 1 감소`}
-            disabled={product.stock_quantity <= 0 || updateStockMutation.isPending}
+            disabled={
+              (isDraftValid ? draftValue : product.stock_quantity) <= 0 ||
+              updateStockMutation.isPending
+            }
             onClick={() => adjust(-1)}
           >
             <Minus className="size-3.5" />

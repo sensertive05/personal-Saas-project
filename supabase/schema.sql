@@ -30,11 +30,34 @@ create policy "Public insert access"
   on products for insert
   with check (true);
 
-drop policy if exists "Public update access" on products;
-create policy "Public update access"
-  on products for update
-  using (true)
-  with check (true);
+-- 재고 수량만 안전하게 수정할 수 있는 함수 (RLS로는 컬럼 단위 제한이 불가능해
+-- "누구나 update 가능" 정책을 products 테이블 전체에 걸면 가격/이름까지 바뀔 수 있다.
+-- 대신 이 함수만 노출해 stock_quantity 외 컬럼은 수정할 수 없도록 한다.)
+create or replace function update_product_stock(product_id uuid, stock_quantity integer)
+returns products
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_product products;
+begin
+  if stock_quantity < 0 then
+    raise exception '재고 수량은 0 이상이어야 합니다: %', stock_quantity;
+  end if;
+
+  update products
+    set stock_quantity = update_product_stock.stock_quantity
+    where id = update_product_stock.product_id
+    returning * into updated_product;
+
+  if updated_product is null then
+    raise exception '상품을 찾을 수 없습니다: %', product_id;
+  end if;
+
+  return updated_product;
+end;
+$$;
 
 -- 샘플 데이터 (선택)
 insert into products (name, description, price, stock_quantity, category)
