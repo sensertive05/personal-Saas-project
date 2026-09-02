@@ -1,7 +1,7 @@
 import { getGuestId } from "@/lib/guest-id";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import type { CartItem } from "@/stores/cart-store";
-import type { Order, OrderWithItems } from "@/types/order";
+import type { Order, OrderStatus, OrderWithItems } from "@/types/order";
 
 export async function createOrder(items: CartItem[]): Promise<string> {
   if (!isSupabaseConfigured || !supabase) {
@@ -61,4 +61,43 @@ export async function getOrder(orderId: string): Promise<OrderWithItems> {
   }
 
   return data as OrderWithItems;
+}
+
+export async function getAllOrders(): Promise<Order[]> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus
+): Promise<Order> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status })
+    .eq("id", orderId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Order;
 }
