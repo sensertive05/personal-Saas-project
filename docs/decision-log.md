@@ -35,6 +35,6 @@
 ## 2026-09-02 — 관리자 주문 관리 구현
 
 - **관리자 인증 없이 전체 주문 열람/상태 변경 가능**: `/admin/orders`는 `getAllOrders`로 `guest_id` 필터 없이 모든 주문을 조회하고, 누구나 상태를 바꿀 수 있다. 관리자 인증이 아직 없기 때문에 생기는 근본적인 한계로, `create_order`/`createProduct`의 insert 정책/`update_product_stock`과 동일한 원인이다. Supabase Auth 도입 시 관리자 역할 기반 접근 제어로 대체해야 한다.
-- **RPC 대신 테이블 직접 update 사용**: 재고 관리(`update_product_stock`)는 RLS로 `stock_quantity` 외 컬럼(가격 등)까지 열리는 것을 막기 위해 전용 함수를 만들었지만, `orders` 테이블은 `status` 외에 클라이언트가 건드려서 위험한 컬럼이 없어 기존 "누구나 read/write 가능" RLS 정책을 그대로 이용해 `updateOrderStatus`가 `orders.status`를 직접 update하도록 했다. 스키마 변경은 없다.
+- **재고 관리와 동일하게 전용 함수(RPC)로 상태만 변경**: 처음에는 `orders`의 기존 "누구나 read/write 가능" 정책을 그대로 이용해 `status`만 직접 update하면 된다고 생각했으나, 코드 리뷰(CodeRabbit)에서 그 permissive 정책(`for all using(true) with check(true)`)이 `status` 외에 `guest_id`, `total_amount` 등 다른 컬럼까지 클라이언트가 임의로 바꿀 수 있게 열어준다는 점이 지적됐다. `update_product_stock`과 동일한 패턴으로 `update_order_status(order_id, status)` 함수(SECURITY DEFINER)를 추가하고, `orders` 테이블의 정책은 select만 남기도록 좁혔다. `create_order`/`update_order_status` 모두 SECURITY DEFINER 함수를 통해서만 쓰기가 이뤄지므로 테이블에 별도 insert/update 정책은 필요 없다.
 - **목록 화면만 구현, 별도 상세 페이지 없음**: 재고 관리와 동일하게 행 단위로 상태를 즉시 저장하는 목록 화면만 만들었다. 주문 품목(주문 아이템) 상세가 필요하면 기존 고객용 `/orders/[id]` 페이지로 확인할 수 있어 별도 관리자 상세 페이지는 만들지 않았다.
 - **쿼리 키 분리**: 고객용 `/orders`는 `guest_id`로 스코프된 `["orders"]` 쿼리를 쓰므로, 전체 주문을 담는 관리자 목록은 캐시가 섞이지 않도록 `["admin-orders"]`라는 별도 키를 사용한다.

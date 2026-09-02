@@ -96,11 +96,14 @@ create index if not exists order_items_order_id_idx on order_items (order_id);
 alter table orders enable row level security;
 alter table order_items enable row level security;
 
+-- orders는 select만 공개로 열어둔다. insert(create_order)와 status 변경(update_order_status)은
+-- 모두 SECURITY DEFINER 함수를 통해서만 이뤄지므로 테이블에 별도 insert/update 정책이 필요 없다.
+-- "for all" 정책은 guest_id/total_amount 등 다른 컬럼까지 클라이언트가 직접 바꿀 수 있게 열어버려 제거했다.
 drop policy if exists "Public read/write access" on orders;
-create policy "Public read/write access"
-  on orders for all
-  using (true)
-  with check (true);
+drop policy if exists "Public read access" on orders;
+create policy "Public read access"
+  on orders for select
+  using (true);
 
 drop policy if exists "Public read/write access" on order_items;
 create policy "Public read/write access"
@@ -165,5 +168,34 @@ begin
     where id = new_order_id;
 
   return new_order_id;
+end;
+$$;
+
+-- 주문 상태만 안전하게 변경할 수 있는 함수 (products의 update_product_stock과 동일한 이유:
+-- orders의 permissive RLS 정책으로는 status 외 컬럼(guest_id, total_amount 등)까지 열리므로
+-- 이 함수만 노출해 status 외 컬럼은 수정할 수 없도록 한다.)
+create or replace function update_order_status(order_id uuid, status text)
+returns orders
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_order orders;
+begin
+  if status not in ('pending', 'confirmed', 'shipped', 'completed', 'cancelled') then
+    raise exception '유효하지 않은 주문 상태입니다: %', status;
+  end if;
+
+  update orders
+    set status = update_order_status.status
+    where id = update_order_status.order_id
+    returning * into updated_order;
+
+  if updated_order is null then
+    raise exception '주문을 찾을 수 없습니다: %', order_id;
+  end if;
+
+  return updated_order;
 end;
 $$;

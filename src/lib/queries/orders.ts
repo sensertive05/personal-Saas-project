@@ -88,12 +88,10 @@ export async function updateOrderStatus(
     throw new Error("SUPABASE_NOT_CONFIGURED");
   }
 
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ status })
-    .eq("id", orderId)
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("update_order_status", {
+    order_id: orderId,
+    status,
+  });
 
   if (error) {
     throw error;
