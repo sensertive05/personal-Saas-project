@@ -44,3 +44,23 @@ export async function createProduct(product: NewProduct): Promise<Product> {
 
   return data;
 }
+
+export async function updateProductStock(
+  id: string,
+  stock_quantity: number
+): Promise<Product> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const { data, error } = await supabase.rpc("update_product_stock", {
+    product_id: id,
+    stock_quantity,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

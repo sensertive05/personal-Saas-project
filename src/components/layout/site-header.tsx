@@ -31,7 +31,10 @@ export function SiteHeader() {
             주문내역
           </Link>
           <Link href="/admin/products" className="text-muted-foreground hover:text-foreground">
-            관리자
+            상품 등록
+          </Link>
+          <Link href="/admin/inventory" className="text-muted-foreground hover:text-foreground">
+            재고 관리
           </Link>
           <Link href="/cart" className="relative flex items-center gap-1.5">
             <ShoppingCart className="size-5" />
