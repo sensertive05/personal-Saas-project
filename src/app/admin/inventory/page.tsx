@@ -186,6 +186,7 @@ function InventoryRow({ product }: { product: Product }) {
             step="1"
             className="w-20 text-right"
             value={draft}
+            disabled={updateStockMutation.isPending}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => {
               if (isDirty) {
