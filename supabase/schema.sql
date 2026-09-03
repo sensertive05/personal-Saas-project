@@ -80,7 +80,7 @@ begin
     raise exception '상품명은 필수입니다';
   end if;
 
-  if price < 0 then
+  if price < 0 or price = 'NaN'::numeric then
     raise exception '가격은 0 이상이어야 합니다: %', price;
   end if;
 
@@ -115,7 +115,14 @@ security definer
 set search_path = public
 as $$
 begin
-  if not exists (select 1 from products where id = delete_product.product_id) then
+  -- 상품 행을 잠근 뒤 확인해야, 잠금 확보 전에 다른 트랜잭션이 order_items를
+  -- 새로 커밋해서 존재 확인을 통과한 뒤 FK 위반 에러로 삭제가 실패하는 경쟁 상태를 막는다.
+  perform 1
+    from products
+    where id = delete_product.product_id
+    for update;
+
+  if not found then
     raise exception '상품을 찾을 수 없습니다: %', product_id;
   end if;
 
