@@ -24,7 +24,8 @@ src/
 │   ├── orders/           # 주문 내역(목록) / 주문 상세([id]) 페이지
 │   └── admin/
 │       ├── products/     # 관리자: 상품 등록 페이지
-│       └── inventory/    # 관리자: 재고 관리 페이지
+│       ├── inventory/    # 관리자: 재고 관리 페이지
+│       └── orders/       # 관리자: 주문 관리 페이지
 ├── components/
 │   ├── ui/                # shadcn/ui 기반 프리미티브 컴포넌트
 │   └── layout/site-header.tsx  # 공통 헤더 (네비게이션 + 장바구니 배지)
@@ -51,9 +52,10 @@ supabase/
 7. 로그인이 없으므로 주문은 브라우저별 `guest_id`(`src/lib/guest-id.ts`, localStorage에 저장된 UUID)로 식별하고, 주문 내역 조회도 이 값으로 필터링한다.
 8. 관리자 상품 등록(`/admin/products`)은 인증 없이 `createProduct`(`src/lib/queries/products.ts`)로 `products` 테이블에 직접 insert한다. 관리자 전용 라우트 보호는 아직 없다 (다음 단계).
 9. 관리자 재고 관리(`/admin/inventory`)는 `updateProductStock`(`src/lib/queries/products.ts`)으로 Postgres 함수 `update_product_stock(product_id, stock_quantity)`를 RPC 호출한다. `products` 테이블에는 직접 update 권한을 열지 않고, 재고 수량만 수정 가능한 이 함수만 노출해 다른 컬럼(가격 등)이 바뀌지 않도록 한다. `/products`, `/admin/products`와 동일한 `["products"]` 쿼리 키를 공유하므로, 재고를 수정하면 다른 화면의 캐시도 함께 무효화되어 최신 값으로 갱신된다.
+10. 관리자 주문 관리(`/admin/orders`)는 `getAllOrders`(`src/lib/queries/orders.ts`)로 `guest_id` 필터 없이 전체 주문을 조회한다. 상태 변경은 `updateOrderStatus`가 Postgres 함수 `update_order_status(order_id, status)`를 RPC 호출한다. `orders` 테이블에는 select만 공개로 열려 있고(`update_product_stock`과 동일한 이유로, permissive한 update 정책은 `guest_id`/`total_amount` 등 다른 컬럼까지 열어버리므로 제거했다), status 변경은 이 함수를 통해서만 가능하다. 고객용 `/orders` 페이지의 `guest_id` 스코프 `["orders"]` 쿼리와 캐시가 섞이지 않도록 `["admin-orders"]`라는 별도 쿼리 키를 사용한다.
 
 ## 다음 단계 (MVP 로드맵)
 
-- 관리자: 상품 수정/삭제, 주문 관리, 매출 대시보드
+- 관리자: 상품 수정/삭제, 매출 대시보드
 - Supabase Auth 기반 관리자 인증
 - GA4 이벤트(`view_item`, `add_to_cart`, `begin_checkout`, `purchase`) 계측 및 퍼널 분석

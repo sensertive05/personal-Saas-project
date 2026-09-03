@@ -31,3 +31,10 @@
 - **재고 수정은 테이블 UPDATE 정책 대신 전용 함수(RPC)로 노출**: 처음에는 상품 등록(insert)과 동일하게 "누구나 update 가능" RLS 정책을 `products`에 걸었으나, RLS는 컬럼 단위 제한이 불가능해 그 정책이 `stock_quantity` 외에 `price`/`name` 등 모든 컬럼까지 열어버린다는 문제가 코드 리뷰로 드러났다. 대신 `create_order`와 같은 패턴으로 `update_product_stock(product_id, stock_quantity)` 함수(SECURITY DEFINER)만 노출해 재고 수량 외 컬럼은 수정할 수 없도록 막았다. 이 함수 자체도 관리자 인증이 없는 현재 단계의 임시 조치이며(누구나 호출 가능), Supabase Auth 도입 시 호출 권한을 관리자 역할로 제한해야 한다.
 - **행 단위 즉시 저장, 별도 "저장" 버튼 없음**: `/admin/inventory`에서 +/- 버튼은 클릭 즉시 DB에 반영되고, 직접 입력한 값은 입력 필드에서 포커스를 벗어날 때(`onBlur`) 저장된다. 여러 행을 한 번에 편집하고 일괄 저장하는 방식보다 구현이 단순하고, 실수로 값을 남겨둔 채 페이지를 벗어나는 일을 줄인다.
 - **쿼리 키 공유**: 재고 수정 후 `["products"]` 쿼리를 무효화하므로, 같은 키를 쓰는 `/products`, `/admin/products` 화면도 재방문 시 최신 재고를 보여준다. 여러 관리자가 동시에 수정하는 동시성 문제는 이번 단계에서 다루지 않는다(단일 관리자 사용을 가정).
+
+## 2026-09-02 — 관리자 주문 관리 구현
+
+- **관리자 인증 없이 전체 주문 열람/상태 변경 가능**: `/admin/orders`는 `getAllOrders`로 `guest_id` 필터 없이 모든 주문을 조회하고, 누구나 상태를 바꿀 수 있다. 관리자 인증이 아직 없기 때문에 생기는 근본적인 한계로, `create_order`/`createProduct`의 insert 정책/`update_product_stock`과 동일한 원인이다. Supabase Auth 도입 시 관리자 역할 기반 접근 제어로 대체해야 한다.
+- **재고 관리와 동일하게 전용 함수(RPC)로 상태만 변경**: 처음에는 `orders`의 기존 "누구나 read/write 가능" 정책을 그대로 이용해 `status`만 직접 update하면 된다고 생각했으나, 코드 리뷰(CodeRabbit)에서 그 permissive 정책(`for all using(true) with check(true)`)이 `status` 외에 `guest_id`, `total_amount` 등 다른 컬럼까지 클라이언트가 임의로 바꿀 수 있게 열어준다는 점이 지적됐다. `update_product_stock`과 동일한 패턴으로 `update_order_status(order_id, status)` 함수(SECURITY DEFINER)를 추가하고, `orders` 테이블의 정책은 select만 남기도록 좁혔다. `create_order`/`update_order_status` 모두 SECURITY DEFINER 함수를 통해서만 쓰기가 이뤄지므로 테이블에 별도 insert/update 정책은 필요 없다.
+- **목록 화면만 구현, 별도 상세 페이지 없음**: 재고 관리와 동일하게 행 단위로 상태를 즉시 저장하는 목록 화면만 만들었다. 주문 품목(주문 아이템) 상세가 필요하면 기존 고객용 `/orders/[id]` 페이지로 확인할 수 있어 별도 관리자 상세 페이지는 만들지 않았다.
+- **쿼리 키 분리**: 고객용 `/orders`는 `guest_id`로 스코프된 `["orders"]` 쿼리를 쓰므로, 전체 주문을 담는 관리자 목록은 캐시가 섞이지 않도록 `["admin-orders"]`라는 별도 키를 사용한다.
