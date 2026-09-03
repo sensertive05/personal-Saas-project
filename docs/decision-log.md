@@ -39,6 +39,13 @@
 - **목록 화면만 구현, 별도 상세 페이지 없음**: 재고 관리와 동일하게 행 단위로 상태를 즉시 저장하는 목록 화면만 만들었다. 주문 품목(주문 아이템) 상세가 필요하면 기존 고객용 `/orders/[id]` 페이지로 확인할 수 있어 별도 관리자 상세 페이지는 만들지 않았다.
 - **쿼리 키 분리**: 고객용 `/orders`는 `guest_id`로 스코프된 `["orders"]` 쿼리를 쓰므로, 전체 주문을 담는 관리자 목록은 캐시가 섞이지 않도록 `["admin-orders"]`라는 별도 키를 사용한다.
 
+## 2026-09-03 — 관리자 상품 수정/삭제 구현
+
+- **재고 관리/주문 관리와 동일한 RPC 패턴 재사용**: `products` 테이블에 update/delete RLS 정책을 열지 않고, `update_product_stock`/`update_order_status`와 같은 패턴으로 `update_product(product_id, ...)`, `delete_product(product_id)` 함수(SECURITY DEFINER)만 노출했다. permissive한 update/delete 정책은 의도한 컬럼 외에도 클라이언트가 임의로 값을 바꿀 수 있게 열어버린다는 점이 이전 두 기능에서 반복적으로 드러난 문제라, 처음부터 RPC로 시작했다.
+- **삭제 차단은 FK 에러 캐치 대신 사전 존재 확인**: `order_items.product_id`가 `products.id`를 FK로 참조하고(ON DELETE 지정 없음), 주문 이력이 있는 상품을 그냥 삭제하면 Postgres가 FK 위반 에러를 던진다. 이 에러를 그대로 노출하는 대신, `delete_product` 함수가 `order_items`에 참조가 있는지 먼저 확인해 "주문 내역이 있어 삭제할 수 없습니다"라는 명확한 한글 메시지를 던지도록 했다. 소프트 삭제(`is_deleted` 컬럼 등)는 모든 상품 조회 쿼리에 필터를 추가해야 해서 범위가 커지므로 이번 단계에서는 채택하지 않았다 — 삭제 자체를 막는 것으로 충분하다고 판단했다.
+- **Dialog 컴포넌트를 직접 작성, 최소한의 접근성 처리 포함**: 수정/삭제 확인에 쓸 모달이 아직 없어 `src/components/ui/dialog.tsx`를 새로 만들었다. `ui.shadcn.com` 레지스트리에 접근할 수 없어 다른 컴포넌트들처럼 직접 작성했다. Radix 같은 라이브러리는 쓰지 않지만(애니메이션 등은 생략), 코드 리뷰(CodeRabbit)에서 지적된 대로 `role="dialog"`/`aria-modal`/`aria-labelledby`, 최초 포커스 이동, Tab 포커스 트랩, Escape 닫기, 닫을 때 이전 포커스 복원은 직접 구현했다 — 이건 접근성 관점에서 최소 요구사항이라 생략하지 않았다. 별도 AlertDialog 없이 삭제 확인도 같은 Dialog로 처리한다.
+- **ProductForm 공유로 폼 중복 최소화**: 상품 등록 폼과 동일한 6개 필드(이름/설명/가격/재고/카테고리/이미지 URL)가 수정 폼에도 필요해, 기존 인라인 폼 JSX를 `ProductForm` 서브컴포넌트로 추출해 등록/수정 화면에서 재사용했다. 별도 파일로 분리하지 않고 페이지 내부에 로컬로 두었다(`inventory/page.tsx`의 `InventoryRow`와 동일한 방식).
+
 ## 2026-09-03 — 관리자 매출 대시보드 구현
 
 - **클라이언트 집계, DB 집계 없음**: 현재 데이터 규모(수십~수백 건)에서는 전체 `orders`/`order_items`를 읽어와 `src/lib/dashboard-metrics.ts`의 순수 함수(`computeDashboardMetrics`)로 계산하는 편이 GROUP BY 뷰/RPC를 새로 만드는 것보다 단순하다. 데이터가 커지면 이후 단계에서 DB 쪽 집계로 옮기는 것을 고려한다.

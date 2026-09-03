@@ -45,6 +45,45 @@ export async function createProduct(product: NewProduct): Promise<Product> {
   return data;
 }
 
+export async function updateProduct(
+  id: string,
+  product: NewProduct
+): Promise<Product> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const { data, error } = await supabase.rpc("update_product", {
+    product_id: id,
+    name: product.name,
+    description: product.description,
+    price: product.price,
+    stock_quantity: product.stock_quantity,
+    category: product.category,
+    image_url: product.image_url,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const { error } = await supabase.rpc("delete_product", {
+    product_id: id,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function updateProductStock(
   id: string,
   stock_quantity: number
