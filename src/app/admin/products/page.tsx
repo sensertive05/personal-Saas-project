@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,15 +24,30 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { createProduct, getProducts } from "@/lib/queries/products";
+import {
+  createProduct,
+  deleteProduct,
+  getProducts,
+  updateProduct,
+} from "@/lib/queries/products";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import type { Product } from "@/types/product";
 
 const currencyFormatter = new Intl.NumberFormat("ko-KR", {
   style: "currency",
   currency: "KRW",
 });
 
-const emptyForm = {
+interface ProductFormValues {
+  name: string;
+  description: string;
+  price: string;
+  stockQuantity: string;
+  category: string;
+  imageUrl: string;
+}
+
+const emptyForm: ProductFormValues = {
   name: "",
   description: "",
   price: "",
@@ -40,9 +56,143 @@ const emptyForm = {
   imageUrl: "",
 };
 
+function isProductFormValid(values: ProductFormValues) {
+  return (
+    values.name.trim().length > 0 &&
+    values.price.trim().length > 0 &&
+    !Number.isNaN(Number(values.price)) &&
+    Number(values.price) >= 0 &&
+    values.stockQuantity.trim().length > 0 &&
+    !Number.isNaN(Number(values.stockQuantity)) &&
+    Number(values.stockQuantity) >= 0
+  );
+}
+
+function ProductForm({
+  idPrefix,
+  values,
+  onChange,
+  onSubmit,
+  submitLabel,
+  pendingLabel,
+  isPending,
+  isError,
+  errorMessage,
+  isSuccess,
+  successMessage,
+}: {
+  idPrefix: string;
+  values: ProductFormValues;
+  onChange: (values: ProductFormValues) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  submitLabel: string;
+  pendingLabel: string;
+  isPending: boolean;
+  isError: boolean;
+  errorMessage: string;
+  isSuccess?: boolean;
+  successMessage?: string;
+}) {
+  return (
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}-name`}>상품명</Label>
+        <Input
+          id={`${idPrefix}-name`}
+          value={values.name}
+          onChange={(e) => onChange({ ...values, name: e.target.value })}
+          required
+        />
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}-category`}>카테고리</Label>
+        <Input
+          id={`${idPrefix}-category`}
+          value={values.category}
+          onChange={(e) => onChange({ ...values, category: e.target.value })}
+        />
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}-price`}>가격</Label>
+        <Input
+          id={`${idPrefix}-price`}
+          type="number"
+          min="0"
+          step="1"
+          value={values.price}
+          onChange={(e) => onChange({ ...values, price: e.target.value })}
+          required
+        />
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${idPrefix}-stockQuantity`}>재고 수량</Label>
+        <Input
+          id={`${idPrefix}-stockQuantity`}
+          type="number"
+          min="0"
+          step="1"
+          value={values.stockQuantity}
+          onChange={(e) => onChange({ ...values, stockQuantity: e.target.value })}
+          required
+        />
+      </div>
+
+      <div className="grid gap-1.5 sm:col-span-2">
+        <Label htmlFor={`${idPrefix}-imageUrl`}>이미지 URL</Label>
+        <Input
+          id={`${idPrefix}-imageUrl`}
+          value={values.imageUrl}
+          onChange={(e) => onChange({ ...values, imageUrl: e.target.value })}
+          placeholder="https://..."
+        />
+      </div>
+
+      <div className="grid gap-1.5 sm:col-span-2">
+        <Label htmlFor={`${idPrefix}-description`}>설명</Label>
+        <Textarea
+          id={`${idPrefix}-description`}
+          value={values.description}
+          onChange={(e) => onChange({ ...values, description: e.target.value })}
+        />
+      </div>
+
+      {isError && (
+        <p className="text-destructive text-sm sm:col-span-2">{errorMessage}</p>
+      )}
+
+      {isSuccess && (
+        <p className="text-sm text-emerald-600 sm:col-span-2">{successMessage}</p>
+      )}
+
+      <div className="sm:col-span-2">
+        <Button type="submit" disabled={!isProductFormValid(values) || isPending}>
+          {isPending ? pendingLabel : submitLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function toFormValues(product: Product): ProductFormValues {
+  return {
+    name: product.name,
+    description: product.description ?? "",
+    price: String(product.price),
+    stockQuantity: String(product.stock_quantity),
+    category: product.category ?? "",
+    imageUrl: product.image_url ?? "",
+  };
+}
+
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState<ProductFormValues>(emptyForm);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
 
   const { data: products, isLoading: isLoadingProducts } = useQuery({
     queryKey: ["products"],
@@ -66,14 +216,40 @@ export default function AdminProductsPage() {
     },
   });
 
-  const isFormValid =
-    form.name.trim().length > 0 &&
-    form.price.trim().length > 0 &&
-    !Number.isNaN(Number(form.price)) &&
-    Number(form.price) >= 0 &&
-    form.stockQuantity.trim().length > 0 &&
-    !Number.isNaN(Number(form.stockQuantity)) &&
-    Number(form.stockQuantity) >= 0;
+  const updateProductMutation = useMutation({
+    mutationFn: () =>
+      updateProduct(editingProduct!.id, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || null,
+        price: Number(editForm.price),
+        stock_quantity: Number(editForm.stockQuantity),
+        category: editForm.category.trim() || null,
+        image_url: editForm.imageUrl.trim() || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setEditingProduct(null);
+    },
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: () => deleteProduct(deletingProduct!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setDeletingProduct(null);
+    },
+  });
+
+  function openEditDialog(product: Product) {
+    setEditForm(toFormValues(product));
+    setEditingProduct(product);
+    updateProductMutation.reset();
+  }
+
+  function openDeleteDialog(product: Product) {
+    setDeletingProduct(product);
+    deleteProductMutation.reset();
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-8">
@@ -101,104 +277,26 @@ export default function AdminProductsPage() {
             <CardTitle>새 상품</CardTitle>
           </CardHeader>
           <CardContent>
-            <form
-              className="grid gap-4 sm:grid-cols-2"
+            <ProductForm
+              idPrefix="create"
+              values={form}
+              onChange={setForm}
               onSubmit={(e) => {
                 e.preventDefault();
                 createProductMutation.mutate();
               }}
-            >
-              <div className="grid gap-1.5">
-                <Label htmlFor="name">상품명</Label>
-                <Input
-                  id="name"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="category">카테고리</Label>
-                <Input
-                  id="category"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="price">가격</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="stockQuantity">재고 수량</Label>
-                <Input
-                  id="stockQuantity"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.stockQuantity}
-                  onChange={(e) =>
-                    setForm({ ...form, stockQuantity: e.target.value })
-                  }
-                  required
-                />
-              </div>
-
-              <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="imageUrl">이미지 URL</Label>
-                <Input
-                  id="imageUrl"
-                  value={form.imageUrl}
-                  onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                  placeholder="https://..."
-                />
-              </div>
-
-              <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="description">설명</Label>
-                <Textarea
-                  id="description"
-                  value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
-                />
-              </div>
-
-              {createProductMutation.isError && (
-                <p className="text-destructive text-sm sm:col-span-2">
-                  {createProductMutation.error instanceof Error
-                    ? createProductMutation.error.message
-                    : "상품 등록에 실패했습니다."}
-                </p>
-              )}
-
-              {createProductMutation.isSuccess && (
-                <p className="text-sm text-emerald-600 sm:col-span-2">
-                  상품이 등록되었습니다.
-                </p>
-              )}
-
-              <div className="sm:col-span-2">
-                <Button
-                  type="submit"
-                  disabled={!isFormValid || createProductMutation.isPending}
-                >
-                  {createProductMutation.isPending ? "등록 중..." : "상품 등록"}
-                </Button>
-              </div>
-            </form>
+              submitLabel="상품 등록"
+              pendingLabel="등록 중..."
+              isPending={createProductMutation.isPending}
+              isError={createProductMutation.isError}
+              errorMessage={
+                createProductMutation.error instanceof Error
+                  ? createProductMutation.error.message
+                  : "상품 등록에 실패했습니다."
+              }
+              isSuccess={createProductMutation.isSuccess}
+              successMessage="상품이 등록되었습니다."
+            />
           </CardContent>
         </Card>
       )}
@@ -229,6 +327,7 @@ export default function AdminProductsPage() {
                     <TableHead>카테고리</TableHead>
                     <TableHead className="text-right">가격</TableHead>
                     <TableHead className="text-right">재고</TableHead>
+                    <TableHead className="text-right">작업</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -248,6 +347,24 @@ export default function AdminProductsPage() {
                       <TableCell className="text-right">
                         {product.stock_quantity}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditDialog(product)}
+                          >
+                            수정
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => openDeleteDialog(product)}
+                          >
+                            삭제
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -256,6 +373,66 @@ export default function AdminProductsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={!!editingProduct}
+        onOpenChange={(open) => !open && setEditingProduct(null)}
+      >
+        <DialogHeader>
+          <DialogTitle>상품 수정</DialogTitle>
+        </DialogHeader>
+        <ProductForm
+          idPrefix="edit"
+          values={editForm}
+          onChange={setEditForm}
+          onSubmit={(e) => {
+            e.preventDefault();
+            updateProductMutation.mutate();
+          }}
+          submitLabel="저장"
+          pendingLabel="저장 중..."
+          isPending={updateProductMutation.isPending}
+          isError={updateProductMutation.isError}
+          errorMessage={
+            updateProductMutation.error instanceof Error
+              ? updateProductMutation.error.message
+              : "상품 수정에 실패했습니다."
+          }
+        />
+      </Dialog>
+
+      <Dialog
+        open={!!deletingProduct}
+        onOpenChange={(open) => !open && setDeletingProduct(null)}
+      >
+        <DialogHeader>
+          <DialogTitle>상품 삭제</DialogTitle>
+          <DialogDescription>
+            &lsquo;{deletingProduct?.name}&rsquo; 상품을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        {deleteProductMutation.isError && (
+          <p className="text-destructive mb-4 text-sm">
+            {deleteProductMutation.error instanceof Error
+              ? deleteProductMutation.error.message
+              : "삭제에 실패했습니다."}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeletingProduct(null)}>
+            취소
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={deleteProductMutation.isPending}
+            onClick={() => deleteProductMutation.mutate()}
+          >
+            {deleteProductMutation.isPending ? "삭제 중..." : "삭제"}
+          </Button>
+        </div>
+      </Dialog>
     </main>
   );
 }

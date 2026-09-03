@@ -59,6 +59,76 @@ begin
 end;
 $$;
 
+create or replace function update_product(
+  product_id uuid,
+  name text,
+  description text,
+  price numeric,
+  stock_quantity integer,
+  category text,
+  image_url text
+)
+returns products
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_product products;
+begin
+  if name is null or trim(name) = '' then
+    raise exception '상품명은 필수입니다';
+  end if;
+
+  if price < 0 then
+    raise exception '가격은 0 이상이어야 합니다: %', price;
+  end if;
+
+  if stock_quantity < 0 then
+    raise exception '재고 수량은 0 이상이어야 합니다: %', stock_quantity;
+  end if;
+
+  update products
+    set name = update_product.name,
+        description = update_product.description,
+        price = update_product.price,
+        stock_quantity = update_product.stock_quantity,
+        category = update_product.category,
+        image_url = update_product.image_url
+    where id = update_product.product_id
+    returning * into updated_product;
+
+  if updated_product is null then
+    raise exception '상품을 찾을 수 없습니다: %', product_id;
+  end if;
+
+  return updated_product;
+end;
+$$;
+
+-- 주문 내역이 있는 상품은 order_items FK(on delete 제약 없음) 때문에 삭제 시 DB 에러가 나므로,
+-- 사전에 존재 여부를 확인해 사용자 친화적인 한글 메시지로 막는다.
+create or replace function delete_product(product_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from products where id = delete_product.product_id) then
+    raise exception '상품을 찾을 수 없습니다: %', product_id;
+  end if;
+
+  if exists (
+    select 1 from order_items where order_items.product_id = delete_product.product_id
+  ) then
+    raise exception '주문 내역이 있어 삭제할 수 없습니다';
+  end if;
+
+  delete from products where id = delete_product.product_id;
+end;
+$$;
+
 -- 샘플 데이터 (선택)
 insert into products (name, description, price, stock_quantity, category)
 values
