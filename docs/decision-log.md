@@ -38,3 +38,10 @@
 - **재고 관리와 동일하게 전용 함수(RPC)로 상태만 변경**: 처음에는 `orders`의 기존 "누구나 read/write 가능" 정책을 그대로 이용해 `status`만 직접 update하면 된다고 생각했으나, 코드 리뷰(CodeRabbit)에서 그 permissive 정책(`for all using(true) with check(true)`)이 `status` 외에 `guest_id`, `total_amount` 등 다른 컬럼까지 클라이언트가 임의로 바꿀 수 있게 열어준다는 점이 지적됐다. `update_product_stock`과 동일한 패턴으로 `update_order_status(order_id, status)` 함수(SECURITY DEFINER)를 추가하고, `orders` 테이블의 정책은 select만 남기도록 좁혔다. `create_order`/`update_order_status` 모두 SECURITY DEFINER 함수를 통해서만 쓰기가 이뤄지므로 테이블에 별도 insert/update 정책은 필요 없다.
 - **목록 화면만 구현, 별도 상세 페이지 없음**: 재고 관리와 동일하게 행 단위로 상태를 즉시 저장하는 목록 화면만 만들었다. 주문 품목(주문 아이템) 상세가 필요하면 기존 고객용 `/orders/[id]` 페이지로 확인할 수 있어 별도 관리자 상세 페이지는 만들지 않았다.
 - **쿼리 키 분리**: 고객용 `/orders`는 `guest_id`로 스코프된 `["orders"]` 쿼리를 쓰므로, 전체 주문을 담는 관리자 목록은 캐시가 섞이지 않도록 `["admin-orders"]`라는 별도 키를 사용한다.
+
+## 2026-09-03 — 관리자 매출 대시보드 구현
+
+- **클라이언트 집계, DB 집계 없음**: 현재 데이터 규모(수십~수백 건)에서는 전체 `orders`/`order_items`를 읽어와 `src/lib/dashboard-metrics.ts`의 순수 함수(`computeDashboardMetrics`)로 계산하는 편이 GROUP BY 뷰/RPC를 새로 만드는 것보다 단순하다. 데이터가 커지면 이후 단계에서 DB 쪽 집계로 옮기는 것을 고려한다.
+- **취소된 주문은 매출/주문 수 집계에서 제외**: `cancelled` 상태 주문은 실현된 매출이 아니므로 총 매출, 총 주문 수, 일별 매출, 인기 상품 계산 모두에서 제외한다.
+- **최근 14일 / 인기 상품 TOP 5로 고정**: 날짜 범위 선택기 없이 최근 14일 고정 윈도우로 추이를 보여주고, 인기 상품도 매출 기준 상위 5개로 고정했다. 범위가 커지면 이후 단계에서 기간 선택 UI를 추가한다.
+- **차트 라이브러리로 recharts 도입**: 프로젝트에 차트 라이브러리가 없어 recharts를 신규 설치했다. Tailwind 테마 변수 연동 없이 고정 색상을 사용해 최소 구현으로 시작했다.
