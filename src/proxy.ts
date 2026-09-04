@@ -41,17 +41,27 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === LOGIN_PATH;
 
+  // getUser()가 세션을 갱신하면 setAll이 response에 새 쿠키를 써두므로,
+  // 리다이렉트 응답을 새로 만들 때도 그 쿠키를 그대로 옮겨야 세션이 끊기지 않는다.
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = LOGIN_PATH;
     url.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) =>
+      redirectResponse.cookies.set(cookie)
+    );
+    return redirectResponse;
   }
 
   if (user && isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/products";
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) =>
+      redirectResponse.cookies.set(cookie)
+    );
+    return redirectResponse;
   }
 
   return response;

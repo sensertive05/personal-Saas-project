@@ -18,7 +18,12 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/admin/products";
+  // 쿼리 파라미터는 신뢰할 수 없으므로 /admin/ 내부 경로만 허용한다
+  // (그 외 값을 그대로 router.replace에 넘기면 javascript: URL 등으로 XSS가 가능하다).
+  const requestedRedirectTo = searchParams.get("redirectTo");
+  const redirectTo = requestedRedirectTo?.startsWith("/admin/")
+    ? requestedRedirectTo
+    : "/admin/products";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
