@@ -25,7 +25,8 @@ src/
 │   └── admin/
 │       ├── products/     # 관리자: 상품 등록 페이지
 │       ├── inventory/    # 관리자: 재고 관리 페이지
-│       └── orders/       # 관리자: 주문 관리 페이지
+│       ├── orders/       # 관리자: 주문 관리 페이지
+│       └── dashboard/    # 관리자: 매출 대시보드 페이지
 ├── components/
 │   ├── ui/                # shadcn/ui 기반 프리미티브 컴포넌트
 │   └── layout/site-header.tsx  # 공통 헤더 (네비게이션 + 장바구니 배지)
@@ -55,8 +56,9 @@ supabase/
 10. 관리자 주문 관리(`/admin/orders`)는 `getAllOrders`(`src/lib/queries/orders.ts`)로 `guest_id` 필터 없이 전체 주문을 조회한다. 상태 변경은 `updateOrderStatus`가 Postgres 함수 `update_order_status(order_id, status)`를 RPC 호출한다. `orders` 테이블에는 select만 공개로 열려 있고(`update_product_stock`과 동일한 이유로, permissive한 update 정책은 `guest_id`/`total_amount` 등 다른 컬럼까지 열어버리므로 제거했다), status 변경은 이 함수를 통해서만 가능하다. 고객용 `/orders` 페이지의 `guest_id` 스코프 `["orders"]` 쿼리와 캐시가 섞이지 않도록 `["admin-orders"]`라는 별도 쿼리 키를 사용한다.
 11. 관리자 상품 수정/삭제(`/admin/products`)는 `updateProduct`/`deleteProduct`(`src/lib/queries/products.ts`)로 Postgres 함수 `update_product`/`delete_product`를 RPC 호출한다. `update_product_stock`과 동일한 이유로 `products` 테이블에 직접 update/delete 정책을 열지 않고 이 함수들만 노출한다. `delete_product`는 `order_items`에 해당 상품을 참조하는 행이 있는지 사전에 확인해, FK 제약 위반 에러 대신 "주문 내역이 있어 삭제할 수 없습니다"라는 한글 메시지를 던진다.
 
+12. 관리자 매출 대시보드(`/admin/dashboard`)는 `getAllOrders`(`["admin-orders"]` 쿼리 키 공유)와 신규 `getAllOrderItems`(`["admin-order-items"]`)를 조회해, DB 집계 없이 클라이언트에서 `computeDashboardMetrics`(`src/lib/dashboard-metrics.ts`)로 총 매출/총 주문 수/최근 14일 일별 매출/인기 상품 TOP 5를 계산한다. `cancelled` 주문은 실현된 매출이 아니므로 모든 집계에서 제외한다. 현재 데이터 규모(수십~수백 건)에서는 DB 쪽 GROUP BY/RPC 없이도 충분하다고 판단했다. 매출 추이 차트는 신규 설치한 `recharts`로 그린다.
+
 ## 다음 단계 (MVP 로드맵)
 
-- 관리자: 매출 대시보드
 - Supabase Auth 기반 관리자 인증
 - GA4 이벤트(`view_item`, `add_to_cart`, `begin_checkout`, `purchase`) 계측 및 퍼널 분석

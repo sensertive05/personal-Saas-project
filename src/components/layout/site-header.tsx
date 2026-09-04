@@ -39,6 +39,9 @@ export function SiteHeader() {
           <Link href="/admin/orders" className="text-muted-foreground hover:text-foreground">
             주문 관리
           </Link>
+          <Link href="/admin/dashboard" className="text-muted-foreground hover:text-foreground">
+            대시보드
+          </Link>
           <Link href="/cart" className="relative flex items-center gap-1.5">
             <ShoppingCart className="size-5" />
             {hasHydrated && itemCount > 0 && (
