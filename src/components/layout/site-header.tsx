@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/stores/cart-store";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 
 export function SiteHeader() {
+  const router = useRouter();
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const itemCount = useCartStore((state) =>
     state.items.reduce((total, item) => total + item.quantity, 0)
   );
@@ -16,6 +21,28 @@ export function SiteHeader() {
   useEffect(() => {
     void useCartStore.persist.rehydrate()?.then(() => setHasHydrated(true));
   }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    supabase.auth.getUser().then(({ data }) => setIsAdmin(!!data.user));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAdmin(!!session?.user);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleLogout() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setIsAdmin(false);
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <header className="border-b">
@@ -30,18 +57,31 @@ export function SiteHeader() {
           <Link href="/orders" className="text-muted-foreground hover:text-foreground">
             주문내역
           </Link>
-          <Link href="/admin/products" className="text-muted-foreground hover:text-foreground">
-            상품 등록
-          </Link>
-          <Link href="/admin/inventory" className="text-muted-foreground hover:text-foreground">
-            재고 관리
-          </Link>
-          <Link href="/admin/orders" className="text-muted-foreground hover:text-foreground">
-            주문 관리
-          </Link>
-          <Link href="/admin/dashboard" className="text-muted-foreground hover:text-foreground">
-            대시보드
-          </Link>
+          {isAdmin && (
+            <>
+              <Link href="/admin/products" className="text-muted-foreground hover:text-foreground">
+                상품 등록
+              </Link>
+              <Link href="/admin/inventory" className="text-muted-foreground hover:text-foreground">
+                재고 관리
+              </Link>
+              <Link href="/admin/orders" className="text-muted-foreground hover:text-foreground">
+                주문 관리
+              </Link>
+              <Link href="/admin/dashboard" className="text-muted-foreground hover:text-foreground">
+                대시보드
+              </Link>
+            </>
+          )}
+          {isAdmin ? (
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              로그아웃
+            </Button>
+          ) : (
+            <Link href="/admin/login" className="text-muted-foreground hover:text-foreground">
+              관리자 로그인
+            </Link>
+          )}
           <Link href="/cart" className="relative flex items-center gap-1.5">
             <ShoppingCart className="size-5" />
             {hasHydrated && itemCount > 0 && (

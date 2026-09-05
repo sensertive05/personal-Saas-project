@@ -16,8 +16,8 @@ create table if not exists products (
 
 create index if not exists products_created_at_idx on products (created_at desc);
 
--- 개발 단계: 관리자 인증이 아직 없어 조회/등록 모두 누구나 가능하도록 허용
--- (Supabase Auth 도입 시 등록/수정/삭제는 관리자 역할로 제한해야 함)
+-- 조회는 비로그인 고객도 가능해야 하므로 공개, 등록/수정/삭제는 로그인한
+-- 관리자로 제한한다 (Supabase Auth 도입, docs/decision-log.md 참고).
 alter table products enable row level security;
 
 drop policy if exists "Public read access" on products;
@@ -25,9 +25,14 @@ create policy "Public read access"
   on products for select
   using (true);
 
+-- Supabase Auth 도입 이후: 등록은 로그인한 관리자만 가능하도록 제한.
+-- "authenticated" role은 Supabase가 유효한 세션(로그인된 사용자)에만 붙여주는
+-- 내장 Postgres role이라 auth.uid()가 있는 요청만 통과한다.
 drop policy if exists "Public insert access" on products;
-create policy "Public insert access"
+drop policy if exists "Authenticated insert access" on products;
+create policy "Authenticated insert access"
   on products for insert
+  to authenticated
   with check (true);
 
 -- 재고 수량만 안전하게 수정할 수 있는 함수 (RLS로는 컬럼 단위 제한이 불가능해
@@ -42,6 +47,10 @@ as $$
 declare
   updated_product products;
 begin
+  if auth.uid() is null then
+    raise exception '관리자 로그인이 필요합니다';
+  end if;
+
   if stock_quantity < 0 then
     raise exception '재고 수량은 0 이상이어야 합니다: %', stock_quantity;
   end if;
@@ -76,6 +85,10 @@ as $$
 declare
   updated_product products;
 begin
+  if auth.uid() is null then
+    raise exception '관리자 로그인이 필요합니다';
+  end if;
+
   if name is null or trim(name) = '' then
     raise exception '상품명은 필수입니다';
   end if;
@@ -115,6 +128,10 @@ security definer
 set search_path = public
 as $$
 begin
+  if auth.uid() is null then
+    raise exception '관리자 로그인이 필요합니다';
+  end if;
+
   -- 상품 행을 잠근 뒤 확인해야, 잠금 확보 전에 다른 트랜잭션이 order_items를
   -- 새로 커밋해서 존재 확인을 통과한 뒤 FK 위반 에러로 삭제가 실패하는 경쟁 상태를 막는다.
   perform 1
@@ -260,6 +277,10 @@ as $$
 declare
   updated_order orders;
 begin
+  if auth.uid() is null then
+    raise exception '관리자 로그인이 필요합니다';
+  end if;
+
   if status not in ('pending', 'confirmed', 'shipped', 'completed', 'cancelled') then
     raise exception '유효하지 않은 주문 상태입니다: %', status;
   end if;

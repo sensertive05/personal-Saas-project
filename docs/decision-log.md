@@ -52,3 +52,12 @@
 - **취소된 주문은 매출/주문 수 집계에서 제외**: `cancelled` 상태 주문은 실현된 매출이 아니므로 총 매출, 총 주문 수, 일별 매출, 인기 상품 계산 모두에서 제외한다.
 - **최근 14일 / 인기 상품 TOP 5로 고정**: 날짜 범위 선택기 없이 최근 14일 고정 윈도우로 추이를 보여주고, 인기 상품도 매출 기준 상위 5개로 고정했다. 범위가 커지면 이후 단계에서 기간 선택 UI를 추가한다.
 - **차트 라이브러리로 recharts 도입**: 프로젝트에 차트 라이브러리가 없어 recharts를 신규 설치했다. Tailwind 테마 변수 연동 없이 고정 색상을 사용해 최소 구현으로 시작했다.
+
+## 2026-09-04 — Supabase Auth 기반 관리자 인증 구현
+
+- **`middleware.ts`가 아닌 `src/proxy.ts` 사용**: 이 프로젝트가 쓰는 Next.js 버전은 16으로, `middleware.ts` 파일 규칙이 `proxy.ts`로 이름이 바뀌었다(동작은 동일). `node_modules/next/dist/docs/`에서 확인 후 반영했다 — AGENTS.md에 적힌 대로 학습 데이터와 다를 수 있는 부분이라 코드 작성 전에 문서를 먼저 읽었다.
+- **두 겹 방어: proxy(optimistic) + RPC의 auth.uid() 체크(secure)**: `src/proxy.ts`는 `/admin/:path*` 요청마다 쿠키의 Supabase 세션만 확인해 미로그인 사용자를 `/admin/login`으로 리다이렉트한다 — 이건 UX용 optimistic 체크로, 유일한 방어선으로 쓰지 않는다. 실제 쓰기 작업은 `update_product`/`delete_product`/`update_product_stock`/`update_order_status` SECURITY DEFINER 함수 내부에 `if auth.uid() is null then raise exception ...`를 추가해 막았다. 이 함수들은 SECURITY DEFINER라 RLS를 우회하므로, 테이블 정책이 아니라 함수 본문에 체크를 넣어야 한다. `products` insert만 RPC가 아니라 직접 테이블 insert라서, RLS 정책을 `to authenticated`로 제한해 동일한 효과를 냈다.
+- **세션을 쿠키에 저장 (localStorage 아님)**: proxy(서버)가 로그인 상태를 읽으려면 브라우저와 서버가 같은 저장소를 봐야 한다. 그래서 `src/lib/supabase/client.ts`를 `@supabase/supabase-js`의 `createClient` 대신 `@supabase/ssr`의 `createBrowserClient`로 바꿨다 — API는 동일하고 세션 저장소만 쿠키로 바뀐다. `src/proxy.ts`는 `@supabase/ssr`의 `createServerClient`로 같은 쿠키를 읽는다.
+- **공개 회원가입 없음**: 이 서비스는 소규모 사업자 한 명(또는 소수)이 쓰는 관리자 도구라 로그인/가입 폼을 따로 만들지 않고, 관리자 계정은 Supabase 대시보드(Authentication → Users)에서 수동으로 생성하는 것을 전제로 했다. `/admin/login`은 로그인 폼만 제공한다.
+- **고객 주문(guest_id) 식별 방식은 그대로 유지**: 2026-08-31 기록에 남긴 "Supabase Auth 도입 시 guest_id를 auth.uid() 기반으로 재작성" 항목은 고객용 인증(로그인 구매)에 대한 것으로, 이번 작업(관리자 인증)과 범위가 다르다. `orders`/`order_items`의 `guest_id` 기반 공개 read/write 정책은 이번 단계에서 손대지 않았고, 여전히 알려진 한계로 남아 있다.
+- **헤더 네비게이션에 로그인 상태 반영**: `SiteHeader`가 `supabase.auth.getUser()` + `onAuthStateChange`로 로그인 여부를 추적해, 관리자 메뉴(상품 등록/재고 관리/주문 관리/대시보드)는 로그인했을 때만 보여주고 로그인/로그아웃 링크를 토글한다. 이는 UX 편의일 뿐이며 실제 접근 제어는 proxy와 RPC가 담당한다.
