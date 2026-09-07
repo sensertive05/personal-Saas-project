@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { createOrder } from "@/lib/queries/orders";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useCartStore } from "@/stores/cart-store";
@@ -46,6 +47,16 @@ export default function CartPage() {
   const placeOrder = useMutation({
     mutationFn: () => createOrder(items),
     onSuccess: (orderId) => {
+      trackPurchase(
+        orderId,
+        items.map((item) => ({
+          item_id: item.productId,
+          item_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+        totalPrice
+      );
       clearCart();
       router.push(`/orders/${orderId}`);
     },
@@ -172,7 +183,18 @@ export default function CartPage() {
               <Button
                 className="self-end"
                 disabled={!isSupabaseConfigured || placeOrder.isPending}
-                onClick={() => placeOrder.mutate()}
+                onClick={() => {
+                  trackBeginCheckout(
+                    items.map((item) => ({
+                      item_id: item.productId,
+                      item_name: item.name,
+                      price: item.price,
+                      quantity: item.quantity,
+                    })),
+                    totalPrice
+                  );
+                  placeOrder.mutate();
+                }}
               >
                 {placeOrder.isPending ? "주문 처리 중..." : "주문하기"}
               </Button>
