@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { trackAddToCart, trackViewItem } from "@/lib/analytics";
+import { trackAddToCart, trackViewItemList } from "@/lib/analytics";
 import { getProducts } from "@/lib/queries/products";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useCartStore } from "@/stores/cart-store";
@@ -45,13 +45,13 @@ export default function ProductsPage() {
   });
 
   useEffect(() => {
-    if (!products) return;
-    products.forEach((product) =>
-      trackViewItem({
+    if (!products || products.length === 0) return;
+    trackViewItemList(
+      products.map((product) => ({
         item_id: product.id,
         item_name: product.name,
         price: product.price,
-      })
+      }))
     );
   }, [products]);
 

@@ -39,7 +39,7 @@ export default function RootLayout({
               src={`https://www.googletagmanager.com/gtag/js?id=${ga4MeasurementId}`}
               strategy="afterInteractive"
             />
-            <Script id="ga4-init" strategy="afterInteractive">
+            <Script id="ga4-init" strategy="beforeInteractive">
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}

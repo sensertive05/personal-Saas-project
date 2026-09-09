@@ -19,11 +19,11 @@ function sendEvent(name: string, params: Record<string, unknown>) {
   window.gtag("event", name, params);
 }
 
-export function trackViewItem(item: AnalyticsItem) {
-  sendEvent("view_item", {
+export function trackViewItemList(items: AnalyticsItem[]) {
+  sendEvent("view_item_list", {
     currency: "KRW",
-    value: item.price,
-    items: [item],
+    value: items.reduce((sum, item) => sum + item.price * (item.quantity ?? 1), 0),
+    items,
   });
 }
 
