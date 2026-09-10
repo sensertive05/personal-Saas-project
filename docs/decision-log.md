@@ -68,3 +68,10 @@
 - **`src/lib/analytics.ts`로 이벤트 전송 함수 분리**: `trackViewItemList`/`trackAddToCart`/`trackBeginCheckout`/`trackPurchase` 4개 함수가 각각 GA4 이커머스 이벤트 스펙(`items` 배열, `currency`, `value`)에 맞춰 `window.gtag`를 호출한다. `window.gtag`가 없으면(스크립트 미로드, 개발 환경, 광고 차단 등) 조용히 무시하도록 해서 계측 실패가 실제 기능(장바구니/주문)을 막지 않도록 했다.
 - **퍼널 4단계를 실제 사용자 액션에 매핑**: 상품 상세 페이지가 따로 없는 목록형 카탈로그 구조라, `/products` 목록에 상품이 표시되는 시점을 `view_item_list`로 잡았다 — GA4 스펙상 `view_item`은 단일 상품 상세 조회용이고 목록 노출은 `view_item_list`이므로, 표시된 상품 전체를 담아 1회 전송한다(코드리뷰 피드백 반영: 상품별로 `view_item`을 반복 전송하던 초기 구현을 수정). `add_to_cart`는 담기 버튼 클릭, `begin_checkout`은 장바구니의 "주문하기" 클릭(주문 성공 여부와 무관하게 시도 시점), `purchase`는 `createOrder` RPC 성공 직후 `transaction_id`로 주문 ID를 포함해 전송한다.
 - **인라인 초기화 스크립트를 `beforeInteractive`로 로드**: `window.dataLayer`/`gtag`를 정의하는 `id="ga4-init"` 스크립트가 `afterInteractive`였을 때는 하이드레이션 이후, 심지어 `/products`의 조회 추적 `useEffect`보다 늦게 실행될 수 있어 초기 이벤트가 조용히 유실될 위험이 있었다. `beforeInteractive`로 바꿔 하이드레이션 전에 `window.gtag`가 반드시 준비되도록 했다(외부 gtag.js 로더 스크립트는 `afterInteractive` 그대로 유지).
+
+## 2026-09-10 — 재고 부족 표시
+
+- **상품별 임계값 대신 고정 임계값**: `products` 테이블에 컬럼을 추가하고 등록/수정 폼을 바꾸는 대신, `src/lib/inventory.ts`에 전체 상품 공통 `LOW_STOCK_THRESHOLD`(5개) 상수와 `isLowStock` 함수를 두었다. 현재는 상품별로 재고 기준을 다르게 둘 필요가 없다고 판단했고, 나중에 필요해지면 DB 마이그레이션 없이 이 상수를 상품별 컬럼 조회로 바꾸면 된다.
+- **품절과 재고 부족을 구분**: `stock_quantity <= 0`(품절)과 `0 < stock_quantity <= 임계값`(재고 부족)을 다른 배지로 표시한다. 품절은 기존처럼 `destructive` 배지, 재고 부족은 별도의 amber 톤 `outline` 배지를 써서 둘을 혼동하지 않게 했다.
+- **표시 위치는 `/products`(고객용)와 `/admin/dashboard`로 한정**: 사용자 요청에 따라 고객이 보는 상품 목록에는 재고 부족 배지를 상품 수량 옆에 추가했고(구매를 서두르게 하는 일반적인 이커머스 패턴), 관리자는 `/admin/dashboard`의 "재고 부족 상품" 카드에서 품절·재고 부족 상품을 재고 수량 오름차순으로 한눈에 확인한다. `/admin/inventory`(재고 수정 화면)에는 별도 배지를 추가하지 않았다 — 이미 모든 상품의 정확한 재고 수량이 입력 필드로 노출되어 있어 중복이라고 판단했다.
+- **대시보드 카드는 매출 데이터와 무관하게 항상 표시**: 재고 부족 카드는 `orders`/`orderItems` 기반 매출 지표(`metrics`)와 분리된 별도의 `products` 쿼리로 계산해서, 주문이 하나도 없는 초기 상태에서도 재고 부족 상품이 있으면 항상 보이도록 했다.

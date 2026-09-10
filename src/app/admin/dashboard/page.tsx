@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -29,7 +30,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { computeDashboardMetrics } from "@/lib/dashboard-metrics";
+import { isLowStock, LOW_STOCK_THRESHOLD } from "@/lib/inventory";
 import { getAllOrderItems, getAllOrders } from "@/lib/queries/orders";
+import { getProducts } from "@/lib/queries/products";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 const currencyFormatter = new Intl.NumberFormat("ko-KR", {
@@ -48,17 +51,30 @@ export default function AdminDashboardPage() {
     queryFn: getAllOrderItems,
     enabled: isSupabaseConfigured,
   });
+  const productsQuery = useQuery({
+    queryKey: ["products"],
+    queryFn: getProducts,
+    enabled: isSupabaseConfigured,
+  });
 
   const isLoading = ordersQuery.isLoading || orderItemsQuery.isLoading;
   const isError = ordersQuery.isError || orderItemsQuery.isError;
   const error = ordersQuery.error ?? orderItemsQuery.error;
   const orders = ordersQuery.data;
   const orderItems = orderItemsQuery.data;
+  const products = productsQuery.data;
 
   const metrics = useMemo(() => {
     if (!orders || !orderItems) return null;
     return computeDashboardMetrics(orders, orderItems);
   }, [orders, orderItems]);
+
+  const lowStockProducts = useMemo(() => {
+    if (!products) return null;
+    return products
+      .filter((p) => p.stock_quantity <= 0 || isLowStock(p.stock_quantity))
+      .sort((a, b) => a.stock_quantity - b.stock_quantity);
+  }, [products]);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-8">
@@ -96,6 +112,50 @@ export default function AdminDashboardPage() {
               {error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다."}
             </CardDescription>
           </CardHeader>
+        </Card>
+      )}
+
+      {isSupabaseConfigured && lowStockProducts && lowStockProducts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>재고 부족 상품</CardTitle>
+            <CardDescription>
+              재고 {LOW_STOCK_THRESHOLD}개 이하이거나 품절된 상품입니다. 재고 관리 화면에서 보충하세요.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>상품명</TableHead>
+                  <TableHead className="text-right">재고 수량</TableHead>
+                  <TableHead className="text-right">상태</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lowStockProducts.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell className="text-right">
+                      {product.stock_quantity}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {product.stock_quantity <= 0 ? (
+                        <Badge variant="destructive">품절</Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500 text-amber-600"
+                        >
+                          재고 부족
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
         </Card>
       )}
 
