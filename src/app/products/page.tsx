@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trackAddToCart, trackViewItemList } from "@/lib/analytics";
+import { isLowStock } from "@/lib/inventory";
 import { getProducts } from "@/lib/queries/products";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useCartStore } from "@/stores/cart-store";
@@ -120,6 +121,16 @@ export default function ProductsPage() {
                     <TableCell className="text-right">
                       {product.stock_quantity <= 0 ? (
                         <Badge variant="destructive">품절</Badge>
+                      ) : isLowStock(product.stock_quantity) ? (
+                        <span className="inline-flex items-center justify-end gap-1.5">
+                          {product.stock_quantity}
+                          <Badge
+                            variant="outline"
+                            className="border-amber-500 text-amber-600"
+                          >
+                            재고 부족
+                          </Badge>
+                        </span>
                       ) : (
                         product.stock_quantity
                       )}
