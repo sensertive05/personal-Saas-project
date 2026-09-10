@@ -61,3 +61,10 @@
 - **공개 회원가입 없음**: 이 서비스는 소규모 사업자 한 명(또는 소수)이 쓰는 관리자 도구라 로그인/가입 폼을 따로 만들지 않고, 관리자 계정은 Supabase 대시보드(Authentication → Users)에서 수동으로 생성하는 것을 전제로 했다. `/admin/login`은 로그인 폼만 제공한다.
 - **고객 주문(guest_id) 식별 방식은 그대로 유지**: 2026-08-31 기록에 남긴 "Supabase Auth 도입 시 guest_id를 auth.uid() 기반으로 재작성" 항목은 고객용 인증(로그인 구매)에 대한 것으로, 이번 작업(관리자 인증)과 범위가 다르다. `orders`/`order_items`의 `guest_id` 기반 공개 read/write 정책은 이번 단계에서 손대지 않았고, 여전히 알려진 한계로 남아 있다.
 - **헤더 네비게이션에 로그인 상태 반영**: `SiteHeader`가 `supabase.auth.getUser()` + `onAuthStateChange`로 로그인 여부를 추적해, 관리자 메뉴(상품 등록/재고 관리/주문 관리/대시보드)는 로그인했을 때만 보여주고 로그인/로그아웃 링크를 토글한다. 이는 UX 편의일 뿐이며 실제 접근 제어는 proxy와 RPC가 담당한다.
+
+## 2026-09-05 — GA4 이벤트 계측
+
+- **`next/script` + 표준 gtag.js 스니펫**: 별도 GA4 SDK/래퍼 라이브러리 없이 Google이 제공하는 gtag.js를 `next/script`(`strategy="afterInteractive"`)로 `src/app/layout.tsx`에 로드했다. `NEXT_PUBLIC_GA4_MEASUREMENT_ID`가 없으면 스크립트 자체를 렌더링하지 않는다 — Supabase 미연결 시 화면에 안내만 띄우고 조용히 넘어가는 이 프로젝트의 기존 패턴과 동일하게, 설정 없는 환경에서도 에러 없이 동작해야 한다는 원칙을 analytics에도 적용했다.
+- **`src/lib/analytics.ts`로 이벤트 전송 함수 분리**: `trackViewItemList`/`trackAddToCart`/`trackBeginCheckout`/`trackPurchase` 4개 함수가 각각 GA4 이커머스 이벤트 스펙(`items` 배열, `currency`, `value`)에 맞춰 `window.gtag`를 호출한다. `window.gtag`가 없으면(스크립트 미로드, 개발 환경, 광고 차단 등) 조용히 무시하도록 해서 계측 실패가 실제 기능(장바구니/주문)을 막지 않도록 했다.
+- **퍼널 4단계를 실제 사용자 액션에 매핑**: 상품 상세 페이지가 따로 없는 목록형 카탈로그 구조라, `/products` 목록에 상품이 표시되는 시점을 `view_item_list`로 잡았다 — GA4 스펙상 `view_item`은 단일 상품 상세 조회용이고 목록 노출은 `view_item_list`이므로, 표시된 상품 전체를 담아 1회 전송한다(코드리뷰 피드백 반영: 상품별로 `view_item`을 반복 전송하던 초기 구현을 수정). `add_to_cart`는 담기 버튼 클릭, `begin_checkout`은 장바구니의 "주문하기" 클릭(주문 성공 여부와 무관하게 시도 시점), `purchase`는 `createOrder` RPC 성공 직후 `transaction_id`로 주문 ID를 포함해 전송한다.
+- **인라인 초기화 스크립트를 `beforeInteractive`로 로드**: `window.dataLayer`/`gtag`를 정의하는 `id="ga4-init"` 스크립트가 `afterInteractive`였을 때는 하이드레이션 이후, 심지어 `/products`의 조회 추적 `useEffect`보다 늦게 실행될 수 있어 초기 이벤트가 조용히 유실될 위험이 있었다. `beforeInteractive`로 바꿔 하이드레이션 전에 `window.gtag`가 반드시 준비되도록 했다(외부 gtag.js 로더 스크립트는 `afterInteractive` 그대로 유지).

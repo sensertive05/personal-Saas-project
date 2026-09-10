@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { trackAddToCart, trackViewItemList } from "@/lib/analytics";
 import { getProducts } from "@/lib/queries/products";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useCartStore } from "@/stores/cart-store";
@@ -42,6 +43,17 @@ export default function ProductsPage() {
     queryFn: getProducts,
     enabled: isSupabaseConfigured,
   });
+
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+    trackViewItemList(
+      products.map((product) => ({
+        item_id: product.id,
+        item_name: product.name,
+        price: product.price,
+      }))
+    );
+  }, [products]);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-8">
@@ -138,6 +150,12 @@ function AddToCartButton({ product }: { product: Product }) {
       disabled={outOfStock}
       onClick={() => {
         addItem(product);
+        trackAddToCart({
+          item_id: product.id,
+          item_name: product.name,
+          price: product.price,
+          quantity: 1,
+        });
         setJustAdded(true);
         window.setTimeout(() => setJustAdded(false), 1000);
       }}
