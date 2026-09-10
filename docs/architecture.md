@@ -11,6 +11,7 @@
 | 백엔드 / DB | Supabase (PostgreSQL) |
 | 분석 | GA4, Microsoft Clarity |
 | 배포 | Vercel (Frontend), Supabase (DB) |
+| 테스트 | Vitest (순수 함수 유닛 테스트) |
 
 ## 폴더 구조
 
@@ -62,6 +63,7 @@ supabase/
 13. 관리자 인증(Supabase Auth)은 두 겹으로 방어한다. (1) `src/proxy.ts`(Next.js 16에서 `middleware.ts`를 대체하는 파일 규칙)가 `/admin/:path*` 요청마다 쿠키의 세션을 확인해, 로그인하지 않은 사용자는 `/admin/login`으로, 이미 로그인한 사용자가 `/admin/login`에 접근하면 `/admin/products`로 리다이렉트한다 — 이는 UX 차원의 optimistic 체크일 뿐이다. (2) 실제 데이터 변경은 `update_product`/`delete_product`/`update_product_stock`/`update_order_status` 함수 내부의 `auth.uid() is null` 체크와, `products` insert RLS 정책의 `to authenticated` 제약이 막는다 — proxy를 우회해도 이 두 번째 방어선은 항상 적용된다. Supabase 세션은 `@supabase/ssr`의 `createBrowserClient`로 (localStorage 대신) 쿠키에 저장해, 브라우저와 proxy(서버)가 같은 로그인 상태를 공유한다. 관리자 계정은 공개 가입 없이 Supabase 대시보드에서 수동으로 생성한다.
 14. GA4 계측은 `src/app/layout.tsx`에서 `next/script`로 gtag.js를 로드하고(`NEXT_PUBLIC_GA4_MEASUREMENT_ID` 미설정 시 스크립트 자체를 렌더링하지 않음), `src/lib/analytics.ts`의 `trackViewItemList`/`trackAddToCart`/`trackBeginCheckout`/`trackPurchase`로 이커머스 퍼널 4개 이벤트를 전송한다. 각 함수는 `window.gtag`가 없으면(스크립트 미로드) 조용히 무시한다. `dataLayer`/`gtag`를 정의하는 인라인 초기화 스크립트는 `beforeInteractive`로 로드해, 하이드레이션·`useEffect` 실행 전에 `window.gtag`가 준비되도록 한다. `view_item_list`는 `/products` 목록에 상품이 표시될 때(목록 전체를 담아 1회 전송), `add_to_cart`는 담기 버튼 클릭 시, `begin_checkout`은 장바구니의 "주문하기" 클릭 시, `purchase`는 `createOrder` 성공 직후(주문 ID 포함) 발생한다.
 15. 재고 부족 판단은 `src/lib/inventory.ts`의 고정 임계값 `LOW_STOCK_THRESHOLD`(5개)와 `isLowStock` 함수로 통일한다(상품별 개별 임계값 없음). `/products`(고객용)는 재고가 0이면 기존과 동일하게 "품절" 배지를, 0보다 크고 임계값 이하면 "재고 부족" 배지를 수량 옆에 추가로 보여준다. `/admin/dashboard`는 `products` 쿼리("products" 키, 다른 화면과 캐시 공유)를 조회해 품절이거나 재고 부족인 상품을 재고 수량 오름차순으로 모은 "재고 부족 상품" 카드를 상단에 표시한다 — 이 카드는 주문 유무와 무관하게 항상 렌더링된다.
+16. 유닛 테스트는 `Vitest`로 순수 함수(예: `src/lib/inventory.ts`)만 검증한다. React 컴포넌트/Supabase 연동은 로컬에서 브라우저로 직접 확인하는 기존 방식을 유지하고, 렌더링 테스트나 Supabase 목(mock)은 아직 도입하지 않았다. `npm run test`(`vitest run`)로 실행하며, `vitest.config.ts`에서 `tsconfig.json`과 동일한 `@/*` 경로 별칭을 설정했다.
 
 ## 다음 단계 (MVP 로드맵)
 
